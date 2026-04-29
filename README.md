@@ -361,8 +361,57 @@ This exploit successfully bypassed the application's sandbox. By calling the lis
 
 <img width="1920" height="1080" alt="Screenshot_2026-04-22_07_58_13" src="https://github.com/user-attachments/assets/7ea492a2-5973-46de-97da-7e1ed0578e34" />
 
+## 9. VaultActivity - AccountManager Privilege Escalation (CVE-2023-20963)
 
+**Vulnerability Type CVE-2023-20963: Android AccountManager Bundle Mishandling**
 
+The VaultActivity introduces a sophisticated attack surface through its "Enable Cloud Backup" feature, which leverages the Android AccountManager system service. Static analysis of the AndroidManifest.xml and the VaultAuthenticatorService reveals that the service is exported and thus reachable by any external application on the device
+
+<img width="1920" height="1080" alt="Screenshot_2026-04-22_08_06_23" src="https://github.com/user-attachments/assets/bfc54baa-d60d-45de-a8d8-d04c01cbe8ed" />
+
+## The core vulnerability (CVE-2023-20963) is rooted in VaultSyncService.java, specifically within the addAccount method, where the system retrieves a Parcelable object from the options bundle using the sync_intent key
+
+<img width="1920" height="1080" alt="Screenshot_2026-04-22_08_12_44" src="https://github.com/user-attachments/assets/f6cd84e4-133c-4df6-9986-a9a8373a749a" />
+
+Because this intent is processed without any validation, it creates a direct pathway for a Privilege Escalation attack. To exploit this, I developed a custom exploit application that calls AccountManager.addAccount() and passes a hidden intent targeting the restricted AdminVaultActivity
+
+<img width="1920" height="1080" alt="Screenshot_2026-04-22_08_12_52" src="https://github.com/user-attachments/assets/4c3c71e6-0e4b-4c81-9e03-60640165ccd2" />
+
+Since this malicious intent is processed and launched by the system's own AccountManager, it completely bypasses the exported="false" security restriction.
+
+<img width="1920" height="1080" alt="Screenshot_2026-04-22_08_16_27" src="https://github.com/user-attachments/assets/d1dd4857-ed2e-4747-9a44-7a1cf185f708" />
+
+Upon triggering the exploit, the unauthorized "ADMIN VAULT" screen was forced into the foreground, revealing an encrypted string: ZNFGER_ERPBVREL_XRL: 88-K99-0NAX-2026
+
+<img width="1920" height="1080" alt="Screenshot_2026-04-24_14_39_42" src="https://github.com/user-attachments/assets/93480509-5b5e-4872-b7cb-4dee6f9e1a3e" />
+
+By identifying the encryption as ROT-13 and passing it through a decoder, I successfully retrieved the final Master Recovery Key: MASTER_RECOVERY_KEY: 88-X99-BANK-2026
+
+<img width="1920" height="1080" alt="Screenshot_2026-04-24_14_39_52" src="https://github.com/user-attachments/assets/31f0999b-29da-49aa-b725-f4dbdbdf144c" />
+
+To finalize the decryption of the sensitive data found within the hidden Admin Vault, I used the rot13.com online decoder to process the encoded string ZNFGER_ERPBVREL_XRL: 88-K99-0NAX-2026. This simple substitution cipher shifted the characters to reveal the plain-text Master Recovery Key: 88-X99-BANK-2026
+
+<img width="1920" height="1080" alt="Screenshot_2026-04-24_14_42_42" src="https://github.com/user-attachments/assets/cedd40f7-80de-45dc-bd06-4c3fca12da27" />
+
+## The acquisition of this Master Key represents the ultimate breach of the application's security architecture. In a real-world banking environment, a Master Key is essentially a "god-mode" credential designed for emergency account recovery or administrative overrides. By possessing this key, an attacker can bypass every individual security layer, including PIN codes, biometric locks, and multi-factor authentication (MFA). It grants absolute control over the entire vault's encrypted assets and sensitive user records, effectively rendering the application's primary defense mechanisms completely obsolete.
+
+## 10.Vault Login Analysis - Hardcoded Secrets & Broken MFA
+
+The investigation into the VaultLoginActivity exposed a series of catastrophic security failures that completely undermine the integrity of the application's most sensitive area.
+
+<img width="1920" height="1080" alt="Screenshot_2026-04-22_17_39_31" src="https://github.com/user-attachments/assets/f95ff8e5-5c0f-49b3-a41c-ff350e56f46f" />
+
+My analysis began by reverse-engineering the application to examine the underlying logic, specifically targeting the VaultLoginActivity.smali file. Within this file, I discovered hardcoded administrative credentials stored as plain-text static fields, revealing the valid username as **vault_admin** and the password as **SecurePass123**
+
+<img width="1920" height="1080" alt="Screenshot_2026-04-24_14_49_17" src="https://github.com/user-attachments/assets/80850c88-4419-4d8f-95cb-774be1d5b461" />
+
+This presence of hardcoded secrets is a critical oversight, as it allows any attacker with access to the decompiled APK to identify administrative entry points without needing to compromise a legitimate user's account.
+
+<img width="1920" height="1080" alt="Screenshot_2026-04-24_14_50_00" src="https://github.com/user-attachments/assets/bc8ce213-6176-4eb3-87e1-decf893469a0" />
+
+Furthermore, the application's attempt at implementing Multi-Factor Authentication (MFA) is fundamentally broken. Although the "Vault Access" screen prompts for a One-Time Password (OTP) to finalize the login process, the system generates and displays the verification code—in this case, 7152—directly on the UI for the user to see. This implementation negates the entire purpose of out-of-band authentication, as the "secret" code is leaked at the very moment it is required. By simply entering the hardcoded credentials and the visible OTP, I bypassed all security layers and gained unrestricted access to the "Secure Vault.
+
+<img width="1920" height="1080" alt="Screenshot_2026-04-24_14_50_09" src="https://github.com/user-attachments/assets/38810459-52a3-4a88-9013-485642aeb119" />
 
 
 
