@@ -34,7 +34,7 @@ To analyze the source code and resources, we decompile the APK using Apktool.
 
 **Command**
 
-apktool d MyGlobalBank_CTF.apk
+apktool d MyGlobalBank_v1.0.0.apk
 
 <img width="1920" height="1080" alt="Screenshot_2026-04-21_12_59_47" src="https://github.com/user-attachments/assets/b080bcdd-6ea5-4b45-87de-3a3d53d90390" />
 
