@@ -9,11 +9,11 @@ To participate in this CTF, you need to download the assets from the [Latest Rel
 ### 1. Installation
 Install the main banking application on your Android emulator or physical device:
 
-''adb install MyGlobalBank_v1.0.0.apk''
+adb install MyGlobalBank_v1.0.0.apk
 
-''adb install Malicious_Exploit.apk''
+adb install Malicious_Exploit.apk
 
-''adb install CVE_2023_20963_Exploit.apk''
+adb install CVE_2023_20963_Exploit.apk
 
 
 ## 1. Firestore Misconfiguration - Admin Credential Leak
