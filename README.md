@@ -2,9 +2,17 @@
 
 A deliberately vulnerable Android banking application for CTF competitions. Contains **10 real-world vulnerabilities**.
 
-##  Quick Start
+## 🚀 Quick Start
 
-adb install MyGlobalBank_CTF.apk
+To participate in this CTF, you need to download the assets from the [Latest Release](https://github.com/AbasovFarasat/MyGlobalBank-CTF/releases/latest).
+
+### 1. Installation
+Install the main banking application on your Android emulator or physical device:
+
+adb install MyGlobalBank_v1.0.0.apk
+adb install Malicious_Exploit.apk
+adb install CVE_2023_20963_Exploit.apk
+
 
 ## 1. Firestore Misconfiguration - Admin Credential Leak
 Vulnerability Type
